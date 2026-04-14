@@ -1,0 +1,12 @@
+# model outputs
+*.pt
+*.abc.generated
+rnn_checkpoint*
+
+# data (keep small fixture, ignore full corpus)
+data/irish_folk.abc
+
+# python
+__pycache__/
+*.pyc
+.DS_Store
