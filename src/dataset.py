@@ -57,6 +57,16 @@ for i, char in enumerate(vocab):
 vocab_size = len(char_index)
 print("Vocab size: " + str(vocab_size))
 
+# wraped into object so it is compatible with the other models
+class Vocab:
+    def __init__(self, char_index, index_char):
+        self.char2idx = char_index
+        self.idx2char = index_char
+        self.size = len(char_index)
+        self.pad_idx = 0
+
+vocab = Vocab(char_index, index_char)
+
 # encode the full text as a list of integers
 encoded = []
 for char in joined:
