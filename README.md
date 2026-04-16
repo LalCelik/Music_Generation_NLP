@@ -75,6 +75,20 @@ K:Emin
 pip install -r requirements.txt
 ```
 
+## How to Run
+
+Train a single model:
+```bash
+python3 src/train.py lstm
+```
+
+Train multiple models:
+```bash
+python3 src/train.py lstm rnn transformer
+```
+
+Outputs are saved to `outputs/` with the model name as a prefix (e.g. `lstm_model.pt`, `lstm_loss_curves.png`, `lstm_generated.mid`).
+
 ## Team & Timeline
 
 | Week | Focus |

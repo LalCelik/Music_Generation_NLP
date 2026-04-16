@@ -1,8 +1,5 @@
 import torch
-import torch.nn as nn
 from music21 import converter
-from dataset import vocab
-from models.lstm import LSTMModel
 
 # Generation approach adapted from:
 # https://www.geeksforgeeks.org/nlp/generating-music-using-abc-notation/
@@ -38,43 +35,11 @@ def generate(model, vocab, start_string, generation_length, temperature):
     return "".join(generated)
 
 
-#load saved model and generate
-model = LSTMModel(vocab.size, embed_size=64, hidden_size=256)
-model.load_state_dict(torch.load("outputs/lstm_model.pt"))
-
-seed = "M:4/4\nK:G\n|"
-output = generate(model, vocab, seed, generation_length=200, temperature=1.0)
-print("Generated tune:\n" + output)
-
-#save as midi for GarageBand
-try:
-    s = converter.parse(output, format="abc")
-    s.write("midi", "outputs/generated.mid")
-    print("Saved to outputs/generated.mid . You can open in GarageBand to hear it")
-except Exception:
-    print("Error saving midi file. Please paste tune into an online abc note player to hear it")
-
-
-# quick test
-# model = LSTMModel(vocab.size, embed_size=64, hidden_size=256)
-# optimizer = Adam(model.parameters(), lr=0.001)
-# loss_fn = nn.CrossEntropyLoss()
-
-# #quick training run
-# model.train()
-
-# for batch_num, (x, y) in enumerate(train_loader):
-#     if batch_num >= 200:
-#         break
-#     optimizer.zero_grad()
-#     logits = model(x)
-#     loss = loss_fn(logits.view(-1, vocab.size), y.view(-1))
-#     loss.backward()
-#     optimizer.step()
-
-# print("Training done")
-
-# #generate from seed
-# seed = "M:4/4\nK:G\n|"
-# output = generate(model, vocab, seed, generation_length=200, temperature=1.0)
-# print("Generated tune:\n" + output)
+def save_midi(output, save_path):
+    #save as midi for GarageBand
+    try:
+        s = converter.parse(output, format="abc")
+        s.write("midi", save_path)
+        print("Saved to " + save_path + " - open in GarageBand to hear it")
+    except Exception:
+        print("Error saving midi file. Please paste tune into an online abc note player to hear it")
