@@ -2,8 +2,8 @@ import sys
 import torch
 import torch.nn as nn
 from torch.optim import Adam
-from dataset import train_loader, val_loader, vocab, joined
-from evaluation import plot_loss_curves, perplexity, plot_pitch_distribution
+from dataset import train_loader, val_loader, test_loader, vocab, joined
+from evaluation import plot_loss_curves, perplexity, plot_pitch_distribution, plot_step_distribution
 from generate import generate, save_midi
 
 # hyperparams
@@ -107,11 +107,26 @@ def run(model_name):
     )
 
     #plot loss curves
-    plot_loss_curves(train_losses, val_losses, "outputs/" + model_name + "_loss_curves.png")
+    plot_loss_curves(train_losses, val_losses, "outputs/" + model_name + "_loss_curves.png", model_name=model_name.upper())
     print("Loss curve saved to outputs/" + model_name + "_loss_curves.png")
 
-    #print final perplexity
-    print("Final perplexity: " + str(round(perplexity(best_val_loss), 4)))
+    #print final val perplexity
+    print("Val perplexity: " + str(round(perplexity(best_val_loss), 4)))
+
+    #evaluate on test set using best saved model
+    model.load_state_dict(torch.load("outputs/" + model_name + "_model.pt"))
+    model.eval()
+    loss_fn = nn.CrossEntropyLoss()
+    test_loss = 0
+
+    for x, y in test_loader:
+        with torch.no_grad():
+            logits = model(x)
+            loss = loss_fn(logits.view(-1, vocab.size), y.view(-1))
+            test_loss = test_loss + loss.item()
+
+    test_loss = test_loss / len(test_loader)
+    print("Test perplexity: " + str(round(perplexity(test_loss), 4)))
 
     #generate a sample and plot pitch distribution
     seed = "M:4/4\nK:G\n|"
@@ -119,6 +134,10 @@ def run(model_name):
 
     plot_pitch_distribution(joined, generated_text, "outputs/" + model_name + "_pitch_distribution.png")
     print("Distribution of pitch is saved to outputs/" + model_name + "_pitch_distribution.png")
+
+    #plot step distribution
+    plot_step_distribution(joined, generated_text, "outputs/" + model_name + "_step_distribution.png")
+    print("Distribution of steps is saved to outputs/" + model_name + "_step_distribution.png")
 
     save_midi(generated_text, "outputs/" + model_name + "_generated.mid")
 

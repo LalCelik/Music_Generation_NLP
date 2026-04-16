@@ -133,6 +133,63 @@ def extract_pitches(abc_text):
 
     return pitches
 
+#steps are the intervals in semitones between consecutive notes
+def extract_steps(abc_text):
+    pitches = extract_pitches(abc_text)
+    steps = []
+    for i in range(len(pitches) - 1):
+        step = abs(pitches[i + 1] - pitches[i])
+        steps.append(step)
+    return steps
+
+
+#plot step interval distribution, compare training vs generated
+def plot_step_distribution(training_text, generated_text, save_path):
+    step_labels = list(range(13))
+
+    train_steps = extract_steps(training_text)
+    gen_steps = extract_steps(generated_text)
+
+    train_counts = [0] * 13
+    gen_counts = [0] * 13
+
+    for s in train_steps:
+        if s <= 12:
+            train_counts[s] = train_counts[s] + 1
+
+    for s in gen_steps:
+        if s <= 12:
+            gen_counts[s] = gen_counts[s] + 1
+
+    #normalize to relative frequency
+    train_total = sum(train_counts)
+    gen_total = sum(gen_counts)
+
+    for i in range(13):
+        if train_total > 0:
+            train_counts[i] = train_counts[i] / train_total
+        if gen_total > 0:
+            gen_counts[i] = gen_counts[i] / gen_total
+
+    width = 0.4
+    train_x = []
+    gen_x = []
+    for v in step_labels:
+        train_x.append(v - width / 2)
+        gen_x.append(v + width / 2)
+
+    plt.figure(figsize=(10, 5))
+    plt.bar(train_x, train_counts, width=width, label="Training", alpha=0.8)
+    plt.bar(gen_x, gen_counts, width=width, label="Generated", alpha=0.8)
+    plt.xticks(step_labels)
+    plt.xlabel("Interval (semitones)")
+    plt.ylabel("Relative Frequency")
+    plt.title("Step dist: Training vs Generated")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=150)
+
+
 #plotting
 #plot the number of times each pitch is in the music (ex. #times A is in the music)
 #compare training and model generated to see if it is accurate
@@ -185,7 +242,7 @@ def plot_pitch_distribution(training_text, generated_text, save_path):
     plt.savefig(save_path, dpi=150)
 
 #plot the loss results
-def plot_loss_curves(train_losses, val_losses, save_path):
+def plot_loss_curves(train_losses, val_losses, save_path, model_name="Model"):
 
     epochs = list(range(1, len(train_losses) + 1))
 
@@ -194,7 +251,7 @@ def plot_loss_curves(train_losses, val_losses, save_path):
     plt.plot(epochs, val_losses, label="Val loss")
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
-    plt.title("LSTM Training and Validation loss")
+    plt.title(model_name + " Training and Validation loss")
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
