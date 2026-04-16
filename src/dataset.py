@@ -124,6 +124,7 @@ def build_dataloaders(
     val_split:   float = 0.1,
     num_workers: int   = 0,
     seed:        int   = 42,
+    max_chars:   int | None = None,
 ):
     """
     path -> (train_loader, val_loader, vocab)
@@ -138,6 +139,8 @@ def build_dataloaders(
     Max sequence length: seq_len (fixed; no padding needed)
     """
     text  = clean_text(load_abc_text(path))
+    if max_chars is not None:
+        text = text[:max_chars]
     vocab = Vocabulary(text)
     print(f"[data] {len(text):,} chars | {vocab}")
 
