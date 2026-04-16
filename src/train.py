@@ -87,7 +87,7 @@ plot_loss_curves(train_losses, val_losses, "outputs/loss_curves.png")
 print("Loss curve saved to outputs/loss_curves.png")
 
 #print final perplexity
-print("Final Perplexity: " + str(round(perplexity(best_val_loss), 4)))
+print("Final perplexity: " + str(round(perplexity(best_val_loss), 4)))
 
 #generate a sample and plot pitch distribution
 seed = "M:4/4\nK:G\n|"

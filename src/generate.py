@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from music21 import converter
 from dataset import vocab
 from models.lstm import LSTMModel
 
@@ -44,6 +45,14 @@ model.load_state_dict(torch.load("outputs/lstm_model.pt"))
 seed = "M:4/4\nK:G\n|"
 output = generate(model, vocab, seed, generation_length=200, temperature=1.0)
 print("Generated tune:\n" + output)
+
+#save as midi for GarageBand
+try:
+    s = converter.parse(output, format="abc")
+    s.write("midi", "outputs/generated.mid")
+    print("Saved to outputs/generated.mid . You can open in GarageBand to hear it")
+except Exception:
+    print("Error saving midi file. Please paste tune into an online abc note player to hear it")
 
 
 # quick test
