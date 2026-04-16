@@ -125,11 +125,12 @@ if __name__ == "__main__":
     p.add_argument("--lr", type=float, default=3e-4)
     p.add_argument("--temperature", type=float, default=1.0)
     p.add_argument("--gen_len", type=int, default=1000)
+    p.add_argument("--max_chars", type=int, default=None, help="Truncate dataset to first N chars for fast iteration")
     p.add_argument("--save", default="transformer_checkpoint.pt")
     args = p.parse_args()
 
     train_loader, val_loader, vocab = build_dataloaders(
-        args.data, args.seq_len, args.batch_size
+        args.data, args.seq_len, args.batch_size, max_chars=args.max_chars
     )
     model, history = run_training(
         train_loader,
