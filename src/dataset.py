@@ -65,6 +65,13 @@ class Vocab:
         self.size = len(char_index)
         self.pad_idx = 0
 
+    def encode(self, text):
+        encoded = []
+        for char in text:
+            if char in self.char2idx:
+                encoded.append(self.char2idx[char])
+        return encoded
+
 vocab = Vocab(char_index, index_char)
 
 # encode the full text as a list of integers

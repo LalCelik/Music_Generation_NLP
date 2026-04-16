@@ -1,14 +1,17 @@
+import os
 import torch
 import torch.nn as nn
 from torch.optim import Adam
 from dataset import train_loader, val_loader, vocab
 from models.lstm import LSTMModel
 
-# hyperparameters
+save_path = "outputs/lstm_model.pt"
+
+# hyperparams
 embed_size = 64
 hidden_size = 256
-num_epochs = 1 #add more when doing full bigger
-max_batches = 50  # set to None to train on full dataset
+num_epochs = 10
+max_batches = None
 learning_rate = 0.001
 
 # model, loss, optimizer
@@ -33,7 +36,11 @@ for epoch in range(num_epochs):
         optimizer.step()
         train_loss = train_loss + loss.item()
 
-    train_loss = train_loss / len(train_loader)
+    if max_batches is not None:
+        num_train_batches = min(max_batches, len(train_loader))
+    else:
+        num_train_batches = len(train_loader)
+    train_loss = train_loss / num_train_batches
 
     model.eval()
     val_loss = 0
@@ -47,3 +54,8 @@ for epoch in range(num_epochs):
     val_loss = val_loss / len(val_loader)
 
     print("Epoch " + str(epoch + 1) + " | Train Loss: " + str(round(train_loss, 4)) + " | Val Loss: " + str(round(val_loss, 4)))
+
+#save model after training
+os.makedirs(os.path.dirname(save_path), exist_ok=True)
+torch.save(model.state_dict(), save_path)
+print("Saved to " + save_path)
