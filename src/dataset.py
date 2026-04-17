@@ -1,166 +1,140 @@
-"""
-data_pipeline.py — shared ABC music data utilities
-"""
-
-import os
-import re
+import glob
+import kagglehub
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, random_split
+from music21 import converter
 
+# Download latest version
+#abc notation
+path = kagglehub.dataset_download("juansebm/abc-notation-music-for-rnn")
 
-def load_abc_text(path: str) -> str:
-    if os.path.isfile(path):
-        with open(path, "r", encoding="utf-8", errors="ignore") as f:
-            return f.read()
-    texts = []
-    for root, _, files in os.walk(path):
-        for fname in sorted(files):
-            if fname.endswith((".abc", ".txt")):
-                with open(os.path.join(root, fname), "r", encoding="utf-8", errors="ignore") as f:
-                    texts.append(f.read().strip())
-    if not texts:
-        raise FileNotFoundError(f"No .abc or .txt files found under: {path}")
-    return "\n\n".join(texts)
+print("Path to dataset files:", path)
 
+abc_file = glob.glob(path + "/**/*.txt", recursive=True)[0]
 
-def clean_text(text: str) -> str:
-    text = text.replace("\r\n", "\n").replace("\r", "\n")
-    lines = [l.rstrip() for l in text.split("\n")]
-    cleaned, blank_count = [], 0
+with open(abc_file, "r", encoding="utf-8", errors="ignore") as f:
+    raw = f.read()
+
+tunes = []
+for t in raw.split("X:"):
+    if t.strip():
+        tunes.append("X:" + t.strip())
+
+# Preprocessing
+# take metadata lines from each tune
+# This code is based on/adapted from this example:
+# https://www.geeksforgeeks.org/nlp/generating-music-using-abc-notation/
+def preprocess(tune):
+    lines = tune.strip().split("\n")
+    clean = []
     for line in lines:
-        if line == "":
-            blank_count += 1
-            if blank_count <= 2:
-                cleaned.append(line)
-        else:
-            blank_count = 0
-            cleaned.append(line)
-    return "\n".join(cleaned)
+        if not line.startswith("X:") and not line.startswith("T:") and not line.startswith("S:") and not line.startswith("%"):
+            clean.append(line)
+    return "\n".join(clean)
 
+cleaned_tunes = []
+for t in tunes:
+    result = preprocess(t)
+    if result.strip():
+        cleaned_tunes.append(result)
 
-def split_songs(text: str) -> list[str]:
-    return [s.strip() for s in re.split(r"\n{2,}", text.strip()) if s.strip()]
+print("Total tunes: " + str(len(cleaned_tunes)))
+print("Sample tune:\n" + cleaned_tunes[0])
 
+# combine all the tunes into one string
+joined = "\n\n".join(cleaned_tunes)
+print("Total characters: " + str(len(joined)))
 
-def filter_songs(songs: list[str], min_len: int = 50) -> list[str]:
-    return [s for s in songs if len(s) >= min_len]
+# build vocabulary of unique characters
+# reserve index 0 for PAD token
+vocab = sorted(set(joined))
+char_index = {"<PAD>": 0}
+index_char = {0: "<PAD>"}
+for i, char in enumerate(vocab):
+    char_index[char] = i + 1
+    index_char[i + 1] = char
 
+vocab_size = len(char_index)
+print("Vocab size: " + str(vocab_size))
 
-class Vocabulary:
-    """
-    Character-level vocabulary with a reserved PAD token at index 0.
+# wraped into object so it is compatible with the other models
+class Vocab:
+    def __init__(self, char_index, index_char):
+        self.char2idx = char_index
+        self.idx2char = index_char
+        self.size = len(char_index)
+        self.pad_idx = 0
 
-    Attributes
-    ----------
-    size      : int              total vocab size (including PAD)
-    pad_idx   : int              always 0; use for Transformer attention masks
-    char2idx  : dict[str, int]   token -> index
-    idx2char  : dict[int, str]   index -> token
-    chars     : list[str]        all real (non-PAD) characters, sorted
+    def encode(self, text):
+        encoded = []
+        for char in text:
+            if char in self.char2idx:
+                encoded.append(self.char2idx[char])
+        return encoded
 
-    Note: batches from ABCDataset are fixed-length and contain no PAD tokens.
-    pad_idx is exposed so the Transformer can use it for src_key_padding_mask.
-    """
+vocab = Vocab(char_index, index_char)
 
-    PAD_TOKEN = "<PAD>"
+# encode the full text as a list of integers
+encoded = []
+for char in joined:
+    encoded.append(char_index[char])
 
-    def __init__(self, text: str):
-        self.pad_idx  = 0
-        self.chars    = sorted(set(text))
-        self.char2idx = {self.PAD_TOKEN: 0}
-        self.char2idx.update({c: i + 1 for i, c in enumerate(self.chars)})
-        self.idx2char = {i: c for c, i in self.char2idx.items()}
-        self.size     = len(self.char2idx)
+print("Encoded length: " + str(len(encoded)))
 
-    def encode(self, text: str) -> list[int]:
-        return [self.char2idx[c] for c in text if c in self.char2idx]
+# slice into fixed-length windows
+seq_len = 100
+inputs = []
+targets = []
 
-    def decode(self, indices) -> str:
-        if isinstance(indices, torch.Tensor):
-            indices = indices.tolist()
-        return "".join(
-            self.idx2char[i]
-            for i in indices
-            if i != self.pad_idx and i in self.idx2char
-        )
+for i in range(len(encoded) - seq_len):
+    input_seq = encoded[i : i + seq_len]
+    target_seq = encoded[i + 1 : i + seq_len + 1]
+    inputs.append(input_seq)
+    targets.append(target_seq)
 
-    def __repr__(self):
-        return f"Vocabulary(size={self.size}, pad_idx={self.pad_idx})"
+print("Total sequences: " + str(len(inputs)))
 
+# PyTorch Dataset
+class MusicDataset(Dataset):
+    def __init__(self, inputs, targets):
+        self.inputs = inputs
+        self.targets = targets
 
-class ABCDataset(Dataset):
-    """
-    Sliding-window next-character prediction dataset.
+    def __len__(self):
+        return len(self.inputs)
 
-    Each item is (x, y) where:
-      x : LongTensor (seq_len,)   input token indices
-      y : LongTensor (seq_len,)   targets shifted right by 1
-
-    Batches from DataLoader are shape (batch_size, seq_len), dtype=torch.long.
-    All windows are exactly seq_len tokens — no padding occurs.
-    """
-
-    def __init__(self, text: str, vocab: Vocabulary, seq_len: int = 100):
-        self.vocab        = vocab
-        self.seq_len      = seq_len
-        self.data         = torch.tensor(vocab.encode(text), dtype=torch.long)
-        self.n_sequences  = len(self.data) - seq_len
-        if self.n_sequences <= 0:
-            raise ValueError(f"Text too short ({len(self.data)} tokens) for seq_len={seq_len}.")
-
-    def __len__(self) -> int:
-        return self.n_sequences
-
-    def __getitem__(self, idx: int):
-        x = self.data[idx     : idx + self.seq_len]
-        y = self.data[idx + 1 : idx + self.seq_len + 1]
+    def __getitem__(self, index):
+        x = torch.tensor(self.inputs[index], dtype=torch.long)
+        y = torch.tensor(self.targets[index], dtype=torch.long)
         return x, y
 
+dataset = MusicDataset(inputs, targets)
+print("Dataset size: " + str(len(dataset)))
 
-def build_dataloaders(
-    path:        str,
-    seq_len:     int   = 100,
-    batch_size:  int   = 64,
-    val_split:   float = 0.1,
-    num_workers: int   = 0,
-    seed:        int   = 42,
-    max_chars:   int | None = None,
-):
-    """
-    path -> (train_loader, val_loader, vocab)
+# train / val / test split (80 / 10 / 10)
+n_total = len(dataset)
+n_train = int(n_total * 0.8)
+n_val = int(n_total * 0.1)
+n_test = n_total - n_train - n_val
 
-    Vocab quick-reference:
-      vocab.size          int
-      vocab.pad_idx       int  (0)
-      vocab.char2idx      dict[str, int]
-      vocab.idx2char      dict[int, str]
+train_set, val_set, test_set = random_split(dataset, [n_train, n_val, n_test])
 
-    Batch shape: (batch_size, seq_len), dtype=torch.long
-    Max sequence length: seq_len (fixed; no padding needed)
-    """
-    text  = clean_text(load_abc_text(path))
-    if max_chars is not None:
-        text = text[:max_chars]
-    vocab = Vocabulary(text)
-    print(f"[data] {len(text):,} chars | {vocab}")
+print("Train size: " + str(len(train_set)))
+print("Val size: " + str(len(val_set)))
+print("Test size: " + str(len(test_set)))
 
-    full_ds = ABCDataset(text, vocab, seq_len=seq_len)
-    n_val   = int(len(full_ds) * val_split)
-    n_train = len(full_ds) - n_val
-    gen     = torch.Generator().manual_seed(seed)
-    train_ds, val_ds = torch.utils.data.random_split(full_ds, [n_train, n_val], generator=gen)
+# DataLoaders
+batch_size = 64
+train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
+val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False)
+test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False)
 
-    kw = dict(batch_size=batch_size, num_workers=num_workers, pin_memory=True)
-    return DataLoader(train_ds, shuffle=True, **kw), DataLoader(val_ds, shuffle=False, **kw), vocab
+#play the first tune that works
+for tune in tunes:
+    try:
+        s = converter.parse(tune, format="abc")
+        s.show("midi")
+        break
+    except Exception:
+        continue
 
-
-if __name__ == "__main__":
-    SAMPLE = "X:1\nT:The Butterfly\nM:9/8\nL:1/8\nK:Emin\n|:B2E G2E F3|B2E G2E FED:|\n\nX:2\nT:Cooley's\nM:4/4\nL:1/8\nK:Edor\n|:eB BB dBAB|eB BB BAFE:|"
-    vocab  = Vocabulary(SAMPLE)
-    print(vocab)
-    ds   = ABCDataset(SAMPLE, vocab, seq_len=10)
-    x, y = ds[0]
-    print(f"x={vocab.decode(x)!r}  y={vocab.decode(y)!r}")
-    loader = DataLoader(ds, batch_size=4)
-    xb, yb = next(iter(loader))
-    print(f"batch x: {xb.shape}  y: {yb.shape}")
