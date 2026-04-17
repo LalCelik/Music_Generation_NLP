@@ -1,156 +1,151 @@
-"""
-train.py the training loop for transformer decoder
-"""
-
-import math
+import sys
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
-from tqdm import tqdm
+from torch.optim import Adam
+from dataset import train_loader, val_loader, test_loader, vocab, joined
+from evaluation import plot_loss_curves, perplexity, plot_pitch_distribution, plot_step_distribution
+from generate import generate, save_midi
 
-from src.models.transformer import TransformerDecoder
+# hyperparams
+embed_size = 64
+hidden_size = 256
+num_epochs = 10
+max_batches = None
+learning_rate = 0.001
 
+#early stopping
+patience = 3
 
-def train_one_epoch(model, loader, optimizer, criterion, device, clip_grad=1.0) -> float:
-    model.train()
-    total_loss = 0.0
-    pbar = tqdm(loader, desc="  train", leave=False)
-    for x, y in pbar:
-        x, y = x.to(device), y.to(device)
-        optimizer.zero_grad()
-        logits = model(x)
-        loss = criterion(logits.reshape(-1, model.vocab_size), y.reshape(-1))
-        loss.backward()
-        nn.utils.clip_grad_norm_(model.parameters(), clip_grad)
-        optimizer.step()
-        total_loss += loss.item()
-        pbar.set_postfix(loss=f"{loss.item():.4f}")
-    return total_loss / len(loader)
+def train(model, train_loader, val_loader, num_epochs, patience, max_batches, learning_rate, save_path):
 
+    train_losses = []
+    val_losses = []
+    best_val_loss = float("inf")
+    epochs_no_improve = 0
 
-@torch.no_grad()
-def evaluate(model, loader, criterion, device) -> tuple[float, float]:
+    # model, loss, optimizer
+    loss_fn = nn.CrossEntropyLoss()
+    optimizer = Adam(model.parameters(), lr=learning_rate)
+
+    # training loop
+    for epoch in range(num_epochs):
+
+        model.train()
+        train_loss = 0
+
+        #for x, y in train_loader:
+        for batch_num, (x, y) in enumerate(train_loader):
+            if max_batches is not None and batch_num >= max_batches:
+                break
+            optimizer.zero_grad()
+            logits = model(x)
+            loss = loss_fn(logits.view(-1, vocab.size), y.view(-1))
+            loss.backward()
+            optimizer.step()
+            train_loss = train_loss + loss.item()
+
+        if max_batches is not None:
+            num_train_batches = min(max_batches, len(train_loader))
+        else:
+            num_train_batches = len(train_loader)
+        train_loss = train_loss / num_train_batches
+
+        model.eval()
+        val_loss = 0
+
+        for x, y in val_loader:
+            with torch.no_grad():
+                logits = model(x)
+                loss = loss_fn(logits.view(-1, vocab.size), y.view(-1))
+                val_loss = val_loss + loss.item()
+
+        val_loss = val_loss / len(val_loader)
+
+        train_losses.append(train_loss)
+        val_losses.append(val_loss)
+        print("Epoch " + str(epoch + 1) + " | Train Loss: " + str(round(train_loss, 4)) + " | Val Loss: " + str(round(val_loss, 4)))
+
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            epochs_no_improve = 0
+            torch.save(model.state_dict(), save_path)
+            print("Val loss improved, model saved")
+        else:
+            epochs_no_improve = epochs_no_improve + 1
+            print("No improvement for " + str(epochs_no_improve) + " epoch(s)")
+
+        if epochs_no_improve >= patience:
+            print("Early stopping at epoch " + str(epoch + 1))
+            break
+
+    print("Saved to " + save_path)
+    return train_losses, val_losses, best_val_loss
+
+#run function 
+def run(model_name):
+
+    if model_name == "lstm":
+        from models.lstm import LSTMModel
+        model = LSTMModel(vocab.size, embed_size, hidden_size)
+
+    elif model_name == "rnn":
+        from models.rnn import RNNModel
+        model = RNNModel(vocab.size, embed_size, hidden_size)
+
+    elif model_name == "transformer":
+        from models.transformer import TransformerModel
+        model = TransformerModel(vocab.size, embed_size, hidden_size)
+
+    else:
+        print("Unknown model: " + model_name + ". Choose from: lstm, rnn, transformer")
+        return
+
+    train_losses, val_losses, best_val_loss = train(
+        model, train_loader, val_loader,
+        num_epochs, patience, max_batches, learning_rate,
+        save_path="outputs/" + model_name + "_model.pt"
+    )
+
+    #plot loss curves
+    plot_loss_curves(train_losses, val_losses, "outputs/" + model_name + "_loss_curves.png", model_name=model_name.upper())
+    print("Loss curve saved to outputs/" + model_name + "_loss_curves.png")
+
+    #print final val perplexity
+    print("Val perplexity: " + str(round(perplexity(best_val_loss), 4)))
+
+    #evaluate on test set using best saved model
+    model.load_state_dict(torch.load("outputs/" + model_name + "_model.pt"))
     model.eval()
-    total_loss = 0.0
-    for x, y in loader:
-        x, y = x.to(device), y.to(device)
-        logits = model(x)
-        total_loss += criterion(logits.reshape(-1, model.vocab_size), y.reshape(-1)).item()
-    avg = total_loss / len(loader)
-    return avg, math.exp(avg)
+    loss_fn = nn.CrossEntropyLoss()
+    test_loss = 0
+
+    for x, y in test_loader:
+        with torch.no_grad():
+            logits = model(x)
+            loss = loss_fn(logits.view(-1, vocab.size), y.view(-1))
+            test_loss = test_loss + loss.item()
+
+    test_loss = test_loss / len(test_loader)
+    print("Test perplexity: " + str(round(perplexity(test_loss), 4)))
+
+    #generate a sample and plot pitch distribution
+    seed = "M:4/4\nK:G\n|"
+    generated_text = generate(model, vocab, seed, generation_length=500, temperature=1.0)
+
+    plot_pitch_distribution(joined, generated_text, "outputs/" + model_name + "_pitch_distribution.png")
+    print("Distribution of pitch is saved to outputs/" + model_name + "_pitch_distribution.png")
+
+    #plot step distribution
+    plot_step_distribution(joined, generated_text, "outputs/" + model_name + "_step_distribution.png")
+    print("Distribution of steps is saved to outputs/" + model_name + "_step_distribution.png")
+
+    save_midi(generated_text, "outputs/" + model_name + "_generated.mid")
 
 
-def run_training(
-    train_loader,
-    val_loader,
-    vocab,
-    d_model=128,
-    nhead=4,
-    num_layers=4,
-    dim_feedforward=512,
-    dropout=0.1,
-    lr=3e-4,
-    epochs=20,
-    clip_grad=1.0,
-    device_str="auto",
-    save_path="transformer_checkpoint.pt",
-):
-    device = (
-        torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        if device_str == "auto"
-        else torch.device(device_str)
-    )
-    print(f"[transformer] device={device}")
+model_names = sys.argv[1:]
 
-    model = TransformerDecoder(
-        vocab_size=vocab.size,
-        d_model=d_model,
-        nhead=nhead,
-        num_layers=num_layers,
-        dim_feedforward=dim_feedforward,
-        dropout=dropout,
-    ).to(device)
-
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
-    criterion = nn.CrossEntropyLoss()
-
-    history = {"train_loss": [], "val_loss": [], "val_ppl": []}
-    best_val = float("inf")
-
-    for epoch in range(1, epochs + 1):
-        tl = train_one_epoch(model, train_loader, optimizer, criterion, device, clip_grad)
-        vl, vp = evaluate(model, val_loader, criterion, device)
-        scheduler.step()
-
-        history["train_loss"].append(tl)
-        history["val_loss"].append(vl)
-        history["val_ppl"].append(vp)
-        print(f"Epoch {epoch:3d}/{epochs}  train={tl:.4f}  val={vl:.4f}  ppl={vp:.2f}")
-
-        if vl < best_val:
-            best_val = vl
-            torch.save(
-                {
-                    "epoch": epoch,
-                    "model_state": model.state_dict(),
-                    "vocab_size": vocab.size,
-                    "d_model": d_model,
-                    "nhead": nhead,
-                    "num_layers": num_layers,
-                    "dim_feedforward": dim_feedforward,
-                },
-                save_path,
-            )
-
-    print(f"[transformer] best val loss={best_val:.4f}  saved -> {save_path}")
-    return model, history
-
-
-if __name__ == "__main__":
-    import argparse
-    from src.dataset import build_dataloaders
-    from src.generate import generate
-
-    p = argparse.ArgumentParser()
-    p.add_argument("--data", default="data/")
-    p.add_argument("--seq_len", type=int, default=100)
-    p.add_argument("--batch_size", type=int, default=64)
-    p.add_argument("--d_model", type=int, default=128)
-    p.add_argument("--nhead", type=int, default=4)
-    p.add_argument("--num_layers", type=int, default=4)
-    p.add_argument("--dim_feedforward", type=int, default=512)
-    p.add_argument("--dropout", type=float, default=0.1)
-    p.add_argument("--epochs", type=int, default=20)
-    p.add_argument("--lr", type=float, default=3e-4)
-    p.add_argument("--temperature", type=float, default=1.0)
-    p.add_argument("--gen_len", type=int, default=1000)
-    p.add_argument("--max_chars", type=int, default=None, help="Truncate dataset to first N chars for fast iteration")
-    p.add_argument("--save", default="transformer_checkpoint.pt")
-    args = p.parse_args()
-
-    train_loader, val_loader, vocab = build_dataloaders(
-        args.data, args.seq_len, args.batch_size, max_chars=args.max_chars
-    )
-    model, history = run_training(
-        train_loader,
-        val_loader,
-        vocab,
-        d_model=args.d_model,
-        nhead=args.nhead,
-        num_layers=args.num_layers,
-        dim_feedforward=args.dim_feedforward,
-        dropout=args.dropout,
-        lr=args.lr,
-        epochs=args.epochs,
-        save_path=args.save,
-    )
-
-    sample = generate(
-        model, vocab, start_string="X:1\n", generation_length=args.gen_len, temperature=args.temperature
-    )
-    print("\n" + "=" * 60 + "\n" + sample)
-    out = args.save.replace(".pt", "_generated.abc")
-    with open(out, "w") as f:
-        f.write(sample)
-    print(f"[transformer] generated ABC -> {out}")
+if len(model_names) == 0:
+    print("Please pick models and run: python3 train.py lstm")
+else:
+    for name in model_names:
+        run(name)

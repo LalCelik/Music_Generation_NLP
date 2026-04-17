@@ -1,33 +1,45 @@
-"""
-generate.py  
-the autoregressive text generation for the Transformer decoder
-"""
-
 import torch
+from music21 import converter
 
+# Generation approach adapted from:
+# https://www.geeksforgeeks.org/nlp/generating-music-using-abc-notation/
+# https://github.com/MITDeepLearning/introtodeeplearning/blob/master/lab1/PT_Part2_Music_Generation.ipynb
 
-@torch.no_grad()
-def generate(
-    model,
-    vocab,
-    start_string: str = "X",
-    generation_length: int = 1000,
-    temperature: float = 1.0,
-    device=None,
-) -> str:
-    if device is None:
-        device = next(model.parameters()).device
+def generate(model, vocab, start_string, generation_length, temperature):
     model.eval()
 
-    generated = list(start_string)
-    input_ids = torch.tensor(vocab.encode(start_string), dtype=torch.long, device=device).unsqueeze(0)
+    #encode the seed string into token ids
+    input_ids = vocab.encode(start_string)
+    input_tensor = torch.tensor(input_ids, dtype=torch.long).unsqueeze(0)
 
-    for _ in range(generation_length):
-        logits = model(input_ids)
-        next_logits = logits[:, -1, :] / temperature
-        probs = torch.softmax(next_logits, dim=-1)
-        next_id = torch.multinomial(probs, num_samples=1)
-        generated.append(vocab.idx2char[next_id.item()])
-        input_ids = torch.cat([input_ids, next_id], dim=1)
+    generated = list(start_string)
+
+    for i in range(generation_length):
+        #forward pass
+        with torch.no_grad():
+            logits = model(input_tensor)
+
+        #take last timestep and add temp
+        next_logits = logits[0, -1, :] / temperature
+        probs = torch.softmax(next_logits, dim=0)
+
+        #sample next character
+        next_id = torch.multinomial(probs, num_samples=1).item()
+        next_char = vocab.idx2char[next_id]
+        generated.append(next_char)
+
+        #append to input for next step
+        next_tensor = torch.tensor([[next_id]], dtype=torch.long)
+        input_tensor = torch.cat([input_tensor, next_tensor], dim=1)
 
     return "".join(generated)
+
+
+def save_midi(output, save_path):
+    #save as midi for GarageBand
+    try:
+        s = converter.parse(output, format="abc")
+        s.write("midi", save_path)
+        print("Saved to " + save_path + " - open in GarageBand to hear it")
+    except Exception:
+        print("Error saving midi file. Please paste tune into an online abc note player to hear it")
