@@ -23,7 +23,7 @@ class VanillaRNN(nn.Module):
     def forward(self, x: torch.Tensor, hidden=None):
         emb    = self.embedding(x)
         out, h = self.rnn(emb, hidden)
-        return self.fc(out), h.detach()
+        return self.fc(out)
 
     def init_hidden(self, batch_size: int, device: torch.device):
         return torch.zeros(self.num_layers, batch_size, self.hidden_size, device=device)
@@ -108,6 +108,9 @@ def run_training(train_loader, val_loader, vocab, embed_dim=64, hidden_size=256,
 
     print(f"[rnn] best val loss={best_val:.4f}  saved → {save_path}")
     return model, history
+
+
+RNNModel = VanillaRNN
 
 
 if __name__ == "__main__":

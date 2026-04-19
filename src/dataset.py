@@ -1,4 +1,5 @@
 import glob
+import re
 import kagglehub
 import torch
 from torch.utils.data import Dataset, DataLoader, random_split
@@ -25,6 +26,7 @@ for t in raw.split("X:"):
 # This code is based on/adapted from this example:
 # https://www.geeksforgeeks.org/nlp/generating-music-using-abc-notation/
 def preprocess(tune):
+    tune = re.sub(r'![^!]+!', '', tune)
     lines = tune.strip().split("\n")
     clean = []
     for line in lines:
