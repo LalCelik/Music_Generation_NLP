@@ -13,6 +13,7 @@ def generate(model, vocab, start_string, generation_length, temperature):
     input_tensor = torch.tensor(input_ids, dtype=torch.long).unsqueeze(0)
 
     generated = list(start_string)
+    k_count = start_string.count("K:")
 
     for i in range(generation_length):
         #forward pass
@@ -26,6 +27,11 @@ def generate(model, vocab, start_string, generation_length, temperature):
         #sample next character
         next_id = torch.multinomial(probs, num_samples=1).item()
         next_char = vocab.idx2char[next_id]
+
+        #stop before writing a second K: (new tune starting)
+        if next_char == "K" and generated[-1] == "\n" and k_count >= 1:
+            break
+
         generated.append(next_char)
 
         #append to input for next step
@@ -36,10 +42,22 @@ def generate(model, vocab, start_string, generation_length, temperature):
 
 
 def save_midi(output, save_path):
-    #save as midi for GarageBand
+    #save raw abc if the saving doesn't work
+    abc_path = save_path.replace(".mid", ".abc")
+    with open(abc_path, "w") as f:
+        f.write(output)
+    print("ABC notation saved to " + abc_path)
+
+    #trim to last complete bar so music21 doesn't fail becuase of incomplete endings
+    last_bar = output.rfind("|")
+    if last_bar != -1:
+        clean = output[:last_bar + 1]
+    else:
+        clean = output
+
     try:
-        s = converter.parse(output, format="abc")
+        s = converter.parse(clean, format="abc")
         s.write("midi", save_path)
-        print("Saved to " + save_path + " - open in GarageBand to hear it")
-    except Exception:
-        print("Error saving midi file. Please paste tune into an online abc note player to hear it")
+        print("MIDI saved to " + save_path + " = open in GarageBand to hear it")
+    except Exception as e:
+        print("Could not save MIDI (" + str(e) + ") = use the .abc file instead")
