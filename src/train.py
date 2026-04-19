@@ -16,7 +16,7 @@ learning_rate = 0.001
 #early stopping
 patience = 3
 
-def train(model, train_loader, val_loader, num_epochs, patience, max_batches, learning_rate, save_path):
+def train(model, train_loader, val_loader, num_epochs, patience, max_batches, learning_rate, save_path, log=print):
 
     train_losses = []
     val_losses = []
@@ -63,26 +63,33 @@ def train(model, train_loader, val_loader, num_epochs, patience, max_batches, le
 
         train_losses.append(train_loss)
         val_losses.append(val_loss)
-        print("Epoch " + str(epoch + 1) + " | Train Loss: " + str(round(train_loss, 4)) + " | Val Loss: " + str(round(val_loss, 4)))
+        log("Epoch " + str(epoch + 1) + " | Train Loss: " + str(round(train_loss, 4)) + " | Val Loss: " + str(round(val_loss, 4)))
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             epochs_no_improve = 0
             torch.save(model.state_dict(), save_path)
-            print("Val loss improved, model saved")
+            log("Val loss improved, model saved")
         else:
             epochs_no_improve = epochs_no_improve + 1
-            print("No improvement for " + str(epochs_no_improve) + " epoch(s)")
+            log("No improvement for " + str(epochs_no_improve) + " epoch(s)")
 
         if epochs_no_improve >= patience:
-            print("Early stopping at epoch " + str(epoch + 1))
+            log("Early stopping at epoch " + str(epoch + 1))
             break
 
-    print("Saved to " + save_path)
+    log("Saved to " + save_path)
     return train_losses, val_losses, best_val_loss
 
-#run function 
+#run function
 def run(model_name):
+
+    #write to a log file as well as printing
+    log_file = open("outputs/" + model_name + "_log.txt", "w")
+    def log(msg):
+        print(msg)
+        log_file.write(msg + "\n")
+        log_file.flush()
 
     if model_name == "lstm":
         from models.lstm import LSTMModel
@@ -103,15 +110,16 @@ def run(model_name):
     train_losses, val_losses, best_val_loss = train(
         model, train_loader, val_loader,
         num_epochs, patience, max_batches, learning_rate,
-        save_path="outputs/" + model_name + "_model.pt"
+        save_path="outputs/" + model_name + "_model.pt",
+        log=log
     )
 
     #plot loss curves
     plot_loss_curves(train_losses, val_losses, "outputs/" + model_name + "_loss_curves.png", model_name=model_name.upper())
-    print("Loss curve saved to outputs/" + model_name + "_loss_curves.png")
+    log("Loss curve saved to outputs/" + model_name + "_loss_curves.png")
 
     #print final val perplexity
-    print("Val perplexity: " + str(round(perplexity(best_val_loss), 4)))
+    log("Val perplexity: " + str(round(perplexity(best_val_loss), 4)))
 
     #evaluate on test set using best saved model
     model.load_state_dict(torch.load("outputs/" + model_name + "_model.pt"))
@@ -126,20 +134,21 @@ def run(model_name):
             test_loss = test_loss + loss.item()
 
     test_loss = test_loss / len(test_loader)
-    print("Test perplexity: " + str(round(perplexity(test_loss), 4)))
+    log("Test perplexity: " + str(round(perplexity(test_loss), 4)))
 
     #generate a sample and plot pitch distribution
     seed = "M:4/4\nK:G\n|"
     generated_text = generate(model, vocab, seed, generation_length=500, temperature=1.0)
 
     plot_pitch_distribution(joined, generated_text, "outputs/" + model_name + "_pitch_distribution.png")
-    print("Distribution of pitch is saved to outputs/" + model_name + "_pitch_distribution.png")
+    log("Distribution of pitch is saved to outputs/" + model_name + "_pitch_distribution.png")
 
     #plot step distribution
     plot_step_distribution(joined, generated_text, "outputs/" + model_name + "_step_distribution.png")
-    print("Distribution of steps is saved to outputs/" + model_name + "_step_distribution.png")
+    log("Distribution of steps is saved to outputs/" + model_name + "_step_distribution.png")
 
     save_midi(generated_text, "outputs/" + model_name + "_generated.mid")
+    log_file.close()
 
 
 model_names = sys.argv[1:]
