@@ -91,6 +91,7 @@ def run(model_name):
         log_file.write(msg + "\n")
         log_file.flush()
 
+
     if model_name == "lstm":
         from models.lstm import LSTMModel
         model = LSTMModel(vocab.size, embed_size, hidden_size)

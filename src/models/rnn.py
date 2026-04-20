@@ -113,6 +113,7 @@ def run_training(train_loader, val_loader, vocab, embed_dim=64, hidden_size=256,
 RNNModel = VanillaRNN
 
 
+
 if __name__ == "__main__":
     import argparse
     from src.dataset import build_dataloaders
