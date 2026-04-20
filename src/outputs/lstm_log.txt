@@ -1,0 +1,26 @@
+Epoch 1 | Train Loss: 0.904 | Val Loss: 0.744
+Val loss improved, model saved
+Epoch 2 | Train Loss: 0.7019 | Val Loss: 0.6755
+Val loss improved, model saved
+Epoch 3 | Train Loss: 0.6574 | Val Loss: 0.6481
+Val loss improved, model saved
+Epoch 4 | Train Loss: 0.6367 | Val Loss: 0.63
+Val loss improved, model saved
+Epoch 5 | Train Loss: 0.6246 | Val Loss: 0.6227
+Val loss improved, model saved
+Epoch 6 | Train Loss: 0.6164 | Val Loss: 0.6166
+Val loss improved, model saved
+Epoch 7 | Train Loss: 0.6103 | Val Loss: 0.6122
+Val loss improved, model saved
+Epoch 8 | Train Loss: 0.6056 | Val Loss: 0.6068
+Val loss improved, model saved
+Epoch 9 | Train Loss: 0.6018 | Val Loss: 0.6058
+Val loss improved, model saved
+Epoch 10 | Train Loss: 0.5986 | Val Loss: 0.6019
+Val loss improved, model saved
+Saved to outputs/lstm_model.pt
+Loss curve saved to outputs/lstm_loss_curves.png
+Val perplexity: 1.8256
+Test perplexity: 1.8252
+Distribution of pitch is saved to outputs/lstm_pitch_distribution.png
+Distribution of steps is saved to outputs/lstm_step_distribution.png
