@@ -1,0 +1,26 @@
+Epoch 1 | Train Loss: 1.2101 | Val Loss: 0.9207
+Val loss improved, model saved
+Epoch 2 | Train Loss: 1.0353 | Val Loss: 0.8839
+Val loss improved, model saved
+Epoch 3 | Train Loss: 1.0074 | Val Loss: 0.8682
+Val loss improved, model saved
+Epoch 4 | Train Loss: 0.9936 | Val Loss: 0.8585
+Val loss improved, model saved
+Epoch 5 | Train Loss: 0.9848 | Val Loss: 0.8516
+Val loss improved, model saved
+Epoch 6 | Train Loss: 0.9781 | Val Loss: 0.8472
+Val loss improved, model saved
+Epoch 7 | Train Loss: 0.9731 | Val Loss: 0.8427
+Val loss improved, model saved
+Epoch 8 | Train Loss: 0.9692 | Val Loss: 0.8397
+Val loss improved, model saved
+Epoch 9 | Train Loss: 0.9662 | Val Loss: 0.8366
+Val loss improved, model saved
+Epoch 10 | Train Loss: 0.9635 | Val Loss: 0.8357
+Val loss improved, model saved
+Saved to outputs/transformer_model.pt
+Loss curve saved to outputs/transformer_loss_curves.png
+Val perplexity: 2.3064
+Test perplexity: 2.3054
+Distribution of pitch is saved to outputs/transformer_pitch_distribution.png
+Distribution of steps is saved to outputs/transformer_step_distribution.png
