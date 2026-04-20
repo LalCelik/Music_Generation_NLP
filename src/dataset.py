@@ -131,12 +131,12 @@ train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
 val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False)
 test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False)
 
-#play the first tune that works
-for tune in tunes:
-    try:
-        s = converter.parse(tune, format="abc")
-        s.show("midi")
-        break
-    except Exception:
-        continue
+#opens a MIDI player (to listen to the music)
+# for tune in tunes:
+#     try:
+#         s = converter.parse(tune, format="abc")
+#         s.show("midi")
+#         break
+#     except Exception:
+#         continue
 
