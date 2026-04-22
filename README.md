@@ -104,3 +104,9 @@ Outputs are saved to `outputs/` with the model name as a prefix (e.g. `lstm_mode
 | **Lal** | LSTM model, custom recurrence logic, hyperparameter tuning, audio rendering (FluidSynth/music21) |
 | **Milo** | Transformer decoder with causal masking, inference/decoding, evaluation suite |
 | **All** | Visualizations, comparison table, listening tests, write-up |
+
+## References
+
+"Generating Music Using ABC Notation." *GeeksforGeeks*, 23 July 2025, www.geeksforgeeks.org/nlp/generating-music-using-abc-notation/. Accessed 22 Apr. 2026.
+
+MITDeepLearning. "PT_Part2_Music_Generation.ipynb." *GitHub*, github.com/MITDeepLearning/introtodeeplearning/blob/master/lab1/PT_Part2_Music_Generation.ipynb. Accessed 22 Apr. 2026.
